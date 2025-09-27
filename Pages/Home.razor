@@ -1,0 +1,186 @@
+﻿@page "/"
+@using PwdGen.Services
+@inject PasswordService PasswordService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Générateur de mots de passe</PageTitle>
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h1 class="card-title text-center mb-4">
+                        <i class="fas fa-lock text-primary"></i> Générateur de mots de passe
+                    </h1>
+                    
+                    <EditForm Model="@passwordOptions" OnValidSubmit="@GeneratePassword">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="length" class="form-label">Longueur du mot de passe:</label>
+                                    <div class="input-group">
+                                        <InputNumber id="length" @bind-Value="passwordOptions.Length" 
+                                                   class="form-control" min="8" max="64" />
+                                        <span class="input-group-text">caractères</span>
+                                    </div>
+                                    <div class="form-text">Entre 8 et 64 caractères</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Options d'inclusion:</label>
+                                    <div class="form-check">
+                                        <InputCheckbox id="lowercase" @bind-Value="passwordOptions.IncludeLowercase" class="form-check-input" />
+                                        <label class="form-check-label" for="lowercase">
+                                            Lettres minuscules (a-z)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <InputCheckbox id="uppercase" @bind-Value="passwordOptions.IncludeUppercase" class="form-check-input" />
+                                        <label class="form-check-label" for="uppercase">
+                                            Lettres majuscules (A-Z)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <InputCheckbox id="digits" @bind-Value="passwordOptions.IncludeDigits" class="form-check-input" />
+                                        <label class="form-check-label" for="digits">
+                                            Chiffres (0-9)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <InputCheckbox id="special" @bind-Value="passwordOptions.IncludeSpecialChars" class="form-check-input" />
+                                        <label class="form-check-label" for="special">
+                                            Caractères spéciaux (!@@#$%^&amp;*...)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mb-3">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-cog fa-spin" style="@(isGenerating ? "" : "display: none;")"></i>
+                                <i class="fas fa-random" style="@(isGenerating ? "display: none;" : "")"></i>
+                                @(isGenerating ? "Génération..." : "Générer mot de passe")
+                            </button>
+                        </div>
+                    </EditForm>
+
+                    @if (!string.IsNullOrEmpty(generatedPassword))
+                    {
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Mot de passe généré:</label>
+                            <div class="input-group">
+                                <input id="password" type="text" class="form-control font-monospace fs-5" 
+                                       value="@generatedPassword" readonly />
+                                <button type="button" class="btn btn-outline-secondary" 
+                                        @onclick="CopyToClipboard" title="Copier dans le presse-papier">
+                                    <i class="fas fa-copy"></i> Copier
+                                </button>
+                            </div>
+                            @if (showCopyMessage)
+                            {
+                                <div class="form-text text-success">
+                                    <i class="fas fa-check"></i> Copié dans le presse-papier !
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i> @errorMessage
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private PasswordOptions passwordOptions = new PasswordOptions
+    {
+        Length = 12,
+        IncludeLowercase = true,
+        IncludeUppercase = true,
+        IncludeDigits = true,
+        IncludeSpecialChars = false
+    };
+
+    private string generatedPassword = "";
+    private string errorMessage = "";
+    private bool isGenerating = false;
+    private bool showCopyMessage = false;
+
+    private async Task GeneratePassword()
+    {
+        isGenerating = true;
+        errorMessage = "";
+        showCopyMessage = false;
+        StateHasChanged();
+
+        try
+        {
+            // Validate length
+            if (passwordOptions.Length < 8 || passwordOptions.Length > 64)
+            {
+                errorMessage = "La longueur du mot de passe doit être entre 8 et 64 caractères.";
+                return;
+            }
+
+            // Validate at least one option is selected
+            if (!passwordOptions.IncludeLowercase && !passwordOptions.IncludeUppercase &&
+                !passwordOptions.IncludeDigits && !passwordOptions.IncludeSpecialChars)
+            {
+                errorMessage = "Veuillez sélectionner au moins un type de caractère.";
+                return;
+            }
+
+            // Small delay to show loading state
+            await Task.Delay(100);
+
+            generatedPassword = PasswordService.GeneratePassword(passwordOptions);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erreur lors de la génération: {ex.Message}";
+        }
+        finally
+        {
+            isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyToClipboard()
+    {
+        if (string.IsNullOrEmpty(generatedPassword))
+            return;
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", generatedPassword);
+            showCopyMessage = true;
+            StateHasChanged();
+
+            // Hide message after 2 seconds
+            await Task.Delay(2000);
+            showCopyMessage = false;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Fallback for older browsers
+            await JSRuntime.InvokeVoidAsync("fallbackCopyTextToClipboard", generatedPassword);
+            showCopyMessage = true;
+            StateHasChanged();
+
+            await Task.Delay(2000);
+            showCopyMessage = false;
+            StateHasChanged();
+        }
+    }
+}
