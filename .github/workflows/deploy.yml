@@ -11,31 +11,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '9.0.x'
-        
-    - name: Restore dependencies
-      run: dotnet restore
-      
-    - name: Build
-      run: dotnet build --no-restore
-      
-    - name: Publish
-      run: dotnet publish -c Release -o dist
-      
-    - name: Configure GitHub Pages base path
-      run: |
-        # Update base href for GitHub Pages
-        sed -i 's|<base href="/" />|<base href="/PwdGen/" />|g' dist/wwwroot/index.html
-        
-    - name: Deploy to GitHub Pages
-      if: github.ref == 'refs/heads/main'
-      uses: peaceiris/actions-gh-pages@v4
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: dist/wwwroot
-        cname: false
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup .NET Core SDK
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: 9.x
+
+            - name: Publish .NET Core Project
+              run: dotnet publish ${{ github.event.repository.name }}.csproj -c Release -o release --nologo
+
+            - name: Change base-tag in index.html from / to /repository subdirectory/
+              run: sed -i 's/<base href="\/" \/>/<base href="\/${{ github.event.repository.name }}\/" \/>/g' release/wwwroot/index.html
+
+            - name: Copy index.html to 404.html
+              run: cp release/wwwroot/index.html release/wwwroot/404.html
+
+            - name: Add .nojekyll file
+              run: touch release/wwwroot/.nojekyll
+
+            - name: Commit wwwroot to GitHub Pages
+              uses: JamesIves/github-pages-deploy-action@v4
+              with:
+                  branch: gh-pages
+                  folder: release/wwwroot
